@@ -1,12 +1,16 @@
 <?php
 
 use App\Models\User;
+use App\Models\Message;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\GroupController;
+use App\Http\Controllers\Api\MessageController;
+use App\Http\Controllers\Api\NotificationController;
 
 Route::middleware('guest')->group(function () {
     //Login
-    Route::get('login', function(Request $request) {
+    Route::post('login', function(Request $request) {
         $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
@@ -103,4 +107,39 @@ Route::middleware('auth:sanctum')->group(function () {
         $request->user()->currentAccessToken()->delete();
         return response()->json(['message' => 'Logged out']);
     })->name('logout');
+
+    // Get all messages from user's groups
+    Route::get('user/group-messages', function() {
+        $user = auth()->user();
+
+        // Get IDs of all groups that the user belongs to
+        $groupIds = $user->groups()->pluck('group_id')->toArray();
+
+        // Get messages for these groups
+        $groupMessages = Message::whereIn('group_id', $groupIds)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $groupMessages
+        ]);
+    });
+
+    // Groups API
+    Route::apiResource('groups', GroupController::class);
+    Route::post('groups/{group}/users', [GroupController::class, 'addUser']);
+    Route::delete('groups/{group}/users/{user}', [GroupController::class, 'removeUser']);
+
+    // Notifications API
+    Route::apiResource('notifications', NotificationController::class);
+    Route::get('users/{user}/notifications', [NotificationController::class, 'userNotifications']);
+    Route::post('notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('notifications/send-to-group', [NotificationController::class, 'sendToGroup']);
+
+    // Messages API
+    Route::apiResource('messages', MessageController::class);
+    Route::get('conversations/{user}', [MessageController::class, 'getConversation']);
+    Route::get('groups/{group}/messages', [MessageController::class, 'getGroupMessages']);
+    Route::post('messages/{message}/read', [MessageController::class, 'markAsRead']);
 });
