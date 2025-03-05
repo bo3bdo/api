@@ -3,6 +3,7 @@
 use App\Models\User;
 use App\Models\Message;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\GroupController;
 use App\Http\Controllers\Api\MessageController;
@@ -10,7 +11,7 @@ use App\Http\Controllers\Api\NotificationController;
 
 Route::middleware('guest')->group(function () {
     //Login
-    Route::post('login', function(Request $request) {
+    Route::post('login', function (Request $request) {
         $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
@@ -31,8 +32,8 @@ Route::middleware('guest')->group(function () {
         ]);
     })->name('login');
 
-//Register
-    Route::post('register',function(Request $request) {
+    //Register
+    Route::post('register', function (Request $request) {
         $request->validate([
             'name' => 'required|string',
             'email' => 'required|email|unique:users',
@@ -50,11 +51,10 @@ Route::middleware('guest')->group(function () {
             'token' => $user->createToken($request->device_name)->plainTextToken,
             'user' => $user,
         ]);
-
     })->name('register');
 
     //Forgot Password
-    Route::get('forgot-password', function(Request $request) {
+    Route::get('forgot-password', function (Request $request) {
         $request->validate(['email' => 'required|email']);
 
         $status = Password::sendResetLink(
@@ -62,12 +62,12 @@ Route::middleware('guest')->group(function () {
         );
 
         return $status === Password::RESET_LINK_SENT
-                    ? response()->json(['status' => __($status)])
-                    : response()->json(['email' => __($status)], 400);
+            ? response()->json(['status' => __($status)])
+            : response()->json(['email' => __($status)], 400);
     })->name('password.request');
 
     //Reset Password
-    Route::get('reset-password/{token}', function(Request $request){
+    Route::get('reset-password/{token}', function (Request $request) {
         $request->validate([
             'token' => 'required',
             'email' => 'required|email',
@@ -85,8 +85,8 @@ Route::middleware('guest')->group(function () {
         );
 
         return $status == Password::PASSWORD_RESET
-                    ? response()->json(['status' => __($status)])
-                    : response()->json(['email' => __($status)], 400);
+            ? response()->json(['status' => __($status)])
+            : response()->json(['email' => __($status)], 400);
     })->name('password.reset');
 });
 
@@ -103,13 +103,13 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     //Logout
-    Route::post('logout', function(Request $request){
+    Route::post('logout', function (Request $request) {
         $request->user()->currentAccessToken()->delete();
         return response()->json(['message' => 'Logged out']);
     })->name('logout');
 
     // Get all messages from user's groups
-    Route::get('user/group-messages', function() {
+    Route::get('user/group-messages', function () {
         $user = auth()->user();
 
         // Get IDs of all groups that the user belongs to
@@ -123,6 +123,30 @@ Route::middleware('auth:sanctum')->group(function () {
         return response()->json([
             'success' => true,
             'data' => $groupMessages
+        ]);
+    });
+
+    // Change Password
+    Route::post('change-password', function (Request $request) {
+        $request->validate([
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8|different:current_password',
+            'new_password_confirmation' => 'required|same:new_password'
+        ]);
+
+        $user = $request->user();
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'message' => 'Current password is incorrect'
+            ], 401);
+        }
+
+        $user->password = Hash::make($request->new_password);
+        $user->save();
+
+        return response()->json([
+            'message' => 'Password changed successfully'
         ]);
     });
 
