@@ -36,60 +36,24 @@ class MessageController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'content' => 'required|string',
-            'receiver_id' => 'nullable|exists:users,id',
-            'group_id' => 'nullable|exists:groups,id',
+        $request->validate([
+            'recipient_id' => 'required|exists:users,id',
+            'content' => 'required|string'
         ]);
 
-        if ($validator->fails()) {
+        if (!auth()->user()->canMessageUser($request->recipient_id)) {
             return response()->json([
-                'success' => false,
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        // Either receiver_id or group_id must be provided, but not both
-        if ((!$request->receiver_id && !$request->group_id) ||
-            ($request->receiver_id && $request->group_id)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Either receiver_id or group_id must be provided, but not both'
-            ], 422);
-        }
-
-        // If sending to a group, ensure the sender is a member of the group
-        if ($request->group_id) {
-            $user = Auth::user();
-            $group = Group::find($request->group_id);
-
-            if (!$group) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Group not found'
-                ], 404);
-            }
-
-            if (!$group->users()->where('user_id', $user->id)->exists()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You are not a member of this group'
-                ], 403);
-            }
+                'message' => 'You are not allowed to message this user'
+            ], 403);
         }
 
         $message = Message::create([
-            'content' => $request->content,
-            'sender_id' => Auth::id(),
-            'receiver_id' => $request->receiver_id,
-            'group_id' => $request->group_id,
+            'sender_id' => auth()->id(),
+            'recipient_id' => $request->recipient_id,
+            'content' => $request->content
         ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Message sent successfully',
-            'data' => $message->load(['sender', 'receiver', 'group'])
-        ], 201);
+        return response()->json($message, 201);
     }
 
     /**
@@ -109,8 +73,8 @@ class MessageController extends Controller
         // Ensure user can only view their own messages or messages in groups they belong to
         $user = Auth::user();
         $canView = $message->sender_id == $user->id ||
-                   $message->receiver_id == $user->id ||
-                   ($message->group_id && $user->groups()->where('group_id', $message->group_id)->exists());
+            $message->receiver_id == $user->id ||
+            ($message->group_id && $user->groups()->where('group_id', $message->group_id)->exists());
 
         if (!$canView) {
             return response()->json([
@@ -216,13 +180,13 @@ class MessageController extends Controller
             ], 404);
         }
 
-        $messages = Message::where(function($query) use ($currentUser, $userId) {
-                $query->where('sender_id', $currentUser->id)
-                      ->where('receiver_id', $userId);
-            })
-            ->orWhere(function($query) use ($currentUser, $userId) {
+        $messages = Message::where(function ($query) use ($currentUser, $userId) {
+            $query->where('sender_id', $currentUser->id)
+                ->where('receiver_id', $userId);
+        })
+            ->orWhere(function ($query) use ($currentUser, $userId) {
                 $query->where('sender_id', $userId)
-                      ->where('receiver_id', $currentUser->id);
+                    ->where('receiver_id', $currentUser->id);
             })
             ->with(['sender', 'receiver'])
             ->orderBy('created_at', 'asc')
@@ -311,7 +275,7 @@ class MessageController extends Controller
         $groupMessages = [];
 
         // Get all groups the user belongs to
-        $userGroups = $user->groups()->with(['messages' => function($query) {
+        $userGroups = $user->groups()->with(['messages' => function ($query) {
             $query->with('sender')->orderBy('created_at', 'desc');
         }])->get();
 

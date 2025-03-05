@@ -150,6 +150,29 @@ Route::middleware('auth:sanctum')->group(function () {
         ]);
     });
 
+    // Allowed Contacts Management
+    Route::get('allowed-contacts', function (Request $request) {
+        $contacts = $request->user()->allowedContacts()->with('contact')->get();
+        return response()->json($contacts);
+    });
+
+    Route::post('allowed-contacts', function (Request $request) {
+        $request->validate([
+            'contact_id' => 'required|exists:users,id'
+        ]);
+
+        $request->user()->allowedContacts()->create([
+            'contact_id' => $request->contact_id
+        ]);
+
+        return response()->json(['message' => 'Contact added successfully']);
+    });
+
+    Route::delete('allowed-contacts/{contact_id}', function ($contact_id) {
+        auth()->user()->allowedContacts()->where('contact_id', $contact_id)->delete();
+        return response()->json(['message' => 'Contact removed successfully']);
+    });
+
     // Groups API
     Route::apiResource('groups', GroupController::class);
     Route::post('groups/{group}/users', [GroupController::class, 'addUser']);

@@ -57,7 +57,7 @@ class User extends Authenticatable
     {
         return Str::of($this->name)
             ->explode(' ')
-            ->map(fn (string $name) => Str::of($name)->substr(0, 1))
+            ->map(fn(string $name) => Str::of($name)->substr(0, 1))
             ->implode('');
     }
 
@@ -91,5 +91,23 @@ class User extends Authenticatable
     public function receivedMessages(): HasMany
     {
         return $this->hasMany(Message::class, 'receiver_id');
+    }
+
+    /**
+     * Get allowed contacts
+     */
+    public function allowedContacts(): HasMany
+    {
+        return $this->hasMany(AllowedContact::class);
+    }
+
+    /**
+     * Check if the user can message another user
+     */
+    public function canMessageUser($userId): bool
+    {
+        return $this->allowedContacts()
+            ->where('contact_id', $userId)
+            ->exists();
     }
 }
